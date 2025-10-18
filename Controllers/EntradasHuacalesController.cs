@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+﻿using GestionarHuacales.Api.Models;
+using GestionarHuacales.Api.Services;
+using GestionHuacales.Api.DTOs;
+using Microsoft.AspNetCore.Mvc;
 
 namespace GestionHuacales.Api.Controllers;
 
@@ -8,35 +9,100 @@ namespace GestionHuacales.Api.Controllers;
 [ApiController]
 public class EntradasHuacalesController : ControllerBase
 {
-    // GET: api/<EntradasHuacalesController>
+    private readonly HuacalesServices _huacalesServices;
+
+    public EntradasHuacalesController(HuacalesServices huacalesServices)
+    {
+        _huacalesServices = huacalesServices;
+    }
+
+    // GET: api/EntradasHuacales (Listar)
     [HttpGet]
-    public IEnumerable<string> Get()
+    public async Task<ActionResult<IEnumerable<EntradasHuacales>>> GetEntradas()
     {
-        return new string[] { "value1", "value2" };
+        var entradas = await _huacalesServices.Listar(e => true);
+        return Ok(entradas);
     }
 
-    // GET api/<EntradasHuacalesController>/5
+    // GET: api/EntradasHuacales/5 (Buscar por ID)
     [HttpGet("{id}")]
-    public string Get(int id)
+    public async Task<ActionResult<EntradasHuacales>> GetEntrada(int id)
     {
-        return "value";
+        var entrada = await _huacalesServices.Buscar(id);
+        if (entrada == null)
+        {
+            return NotFound("No se encontro la entrada.");
+        }
+        return Ok(entrada);
     }
 
-    // POST api/<EntradasHuacalesController>
+    // POST: api/EntradasHuacales (Crear usando DTO)
     [HttpPost]
-    public void Post([FromBody] string value)
+    public async Task<ActionResult<EntradasHuacales>> PostEntrada([FromBody] EntradaHuacalesDto entradaDto)
     {
+        var entrada = new EntradasHuacales
+        {
+            EntradaId = 0, 
+            Fecha = DateTime.UtcNow,
+            NombreCliente = entradaDto.NombreCliente,
+            DetalleHuacales = entradaDto.Detalle.Select(h => new DetalleHuacales
+            {
+                TipoId = h.TipoId,
+                Cantidad = h.Cantidad,
+                Precio = h.Precio,
+            }).ToList()
+        };
+
+        entrada.Cantidad = entrada.DetalleHuacales.Sum(d => d.Cantidad);
+        entrada.Precio = entrada.DetalleHuacales.Sum(d => d.Cantidad * d.Precio);
+
+        var guardado = await _huacalesServices.Guardar(entrada);
+        if (!guardado)
+        {
+            return BadRequest("No se pudo guardar la entrada.");
+        }
+
+        return CreatedAtAction(nameof(GetEntrada), new { id = entrada.EntradaId }, entrada);
     }
 
-    // PUT api/<EntradasHuacalesController>/5
+    
     [HttpPut("{id}")]
-    public void Put(int id, [FromBody] string value)
+    public async Task<IActionResult> PutEntrada(int id, [FromBody] EntradaHuacalesDto entradaDto)
     {
+        var entrada = new EntradasHuacales
+        {
+            EntradaId = id, 
+            Fecha = DateTime.UtcNow,
+            NombreCliente = entradaDto.NombreCliente,
+            DetalleHuacales = entradaDto.Detalle.Select(h => new DetalleHuacales
+            {
+                EntradaId = id, 
+                TipoId = h.TipoId,
+                Cantidad = h.Cantidad,
+                Precio = h.Precio,
+            }).ToList()
+        };
+
+        entrada.Cantidad = entrada.DetalleHuacales.Sum(d => d.Cantidad);
+        entrada.Precio = entrada.DetalleHuacales.Sum(d => d.Cantidad * d.Precio);
+
+        var modificado = await _huacalesServices.Guardar(entrada);
+        if (!modificado)
+        {
+            return NotFound("No se pudo modificar la entrada, verifique que el ID existe.");
+        }
+
+        return NoContent(); 
     }
 
-    // DELETE api/<EntradasHuacalesController>/5
     [HttpDelete("{id}")]
-    public void Delete(int id)
+    public async Task<IActionResult> DeleteEntrada(int id)
     {
+        var eliminado = await _huacalesServices.Eliminar(id);
+        if (!eliminado)
+        {
+            return NotFound("No se encontro la entrada para eliminar.");
+        }
+        return NoContent(); 
     }
 }
